@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  db:
+    image: postgres:17.4
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: ordersdb
+    container_name: orders_container
+    volumes: 
+      - ./postgres:/var/lib/postgresql/data

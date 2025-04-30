@@ -3,9 +3,10 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { PrismaClient } from '@prisma/client';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { OrderPaginationDto } from 'src/common';
-import { ChangeOrderStatusDto } from './dto';
+import { ChangeOrderStatusDto, PaidOrderDto } from './dto';
 import { NATS_SERVICE } from 'src/config/services';
 import { firstValueFrom } from 'rxjs';
+import { OrderWithProducts } from './interfaces/order-with-products';
 
 @Injectable()
 export class OrdersService extends PrismaClient implements OnModuleInit {
@@ -161,10 +162,6 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
         name: products.find((product) => product.id === orderItem.productId).name,
       }))
     }
-
-
-    return order
-
   }
 
   async changeOrderStatus(changeOrderStatusDto: ChangeOrderStatusDto) {
@@ -180,6 +177,51 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
       where: { id },
       data: { status }
     })
+
+  }
+
+
+  async createPaymentSession(order: OrderWithProducts) {
+
+    const paymentSession = await firstValueFrom(
+      this.client.send('create.payment.session', {
+        orderId: order.id,
+        currency: 'usd',
+        items: order.OrderItem.map(item => ({
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        }))
+      })
+    )
+
+    return paymentSession;
+  }
+
+
+  async paidOrder(paidOrderDto: PaidOrderDto) {
+
+    this.logger.log('Paid order');
+    this.logger.log(this.paidOrder);
+
+    const order = await this.order.update({
+      where: { id: paidOrderDto.orderId },
+      data: {
+        status: 'PAID',
+        paid: true,
+        paidAt: new Date(),
+        stripeChargeId: paidOrderDto.stripePaymentId,
+
+        // relation
+        OrderReceipt: {
+          create: {
+            receiptUrl: paidOrderDto.receiptUrl
+          }
+        }
+      }
+    });
+
+    return order;
 
   }
 
